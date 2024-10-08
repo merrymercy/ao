@@ -224,6 +224,58 @@ def main(
         if "spinquant" in quantization:
             from torchao.prototype.spinquant import apply_spinquant
             apply_spinquant(model)
+        if "gemlite" in quantization:
+            import gemlite
+            import hqq
+            from gemlite.core import GemLiteLinearTriton, DType
+            from torchao.quantization.quant_api import _replace_with_custom_fn_if_matches_filter, _is_linear
+            from hqq.core.quantize import HQQLinear, BaseQuantizeConfig
+            # from torchao.quantization.prototype.gemlite.core import GemLiteLinearTriton, DType
+            # from torchao.quantization.quant_api import _replace_with_custom_fn_if_matches_filter, _is_linear
+            # from hqq.core.quantize import HQQLinear, BaseQuantizeConfig
+            _quant_args = quantization.split("-")
+
+            W_nbits = int(_quant_args[1])
+            group_size = int(_quant_args[2])
+
+            assert W_nbits in [1, 2, 4, 8], f"W_nbits needs to be in [1, 2, 4, 8], got {W_nbits} for gemlite-<W_nbits>-<group_size>"
+            assert group_size in [64, 128, 256], f"group_size needs to be in [64, 128, 256], got {group_size} for gemlite-<W_nbits>-<group_size>"
+            assert precision == torch.float16, f"gemlite only supports float16 precision, got {precision}"
+
+            def replace_fn(mod):
+                if not isinstance(mod, torch.nn.Linear):
+                    return mod
+
+                in_features = mod.in_features
+                out_features = mod.out_features
+                
+                compute_dtype = mod.weight.dtype
+                input_dtype, output_dtype = DType.FP16, DType.FP16
+
+                quant_config = BaseQuantizeConfig(nbits=W_nbits, group_size=group_size, quant_zero=False, quant_scale=False, axis=1)
+                quant_config['weight_quant_params']['optimize'] = False
+                hqq_layer = HQQLinear(mod, quant_config=quant_config, compute_dtype=compute_dtype, device=device, del_orig=False)
+                orig_shape   = (out_features, in_features)
+                gemlite_linear = GemLiteLinearTriton(W_nbits=W_nbits, 
+                    group_size=group_size, in_features=in_features, out_features=out_features, 
+                    input_dtype=input_dtype, output_dtype=output_dtype)
+                gemlite_linear.pack(hqq_layer.unpack().view(orig_shape), hqq_layer.meta['scale'], hqq_layer.meta['zero'], None)
+                return gemlite_linear
+                
+
+            _replace_with_custom_fn_if_matches_filter(model, replace_fn, _is_linear)
+
+            generate(
+                model,
+                encode_tokens(tokenizer, prompt, bos=True, device=device),
+                max_new_tokens,
+                batch_size,
+                interactive=False,
+                temperature=temperature,
+                top_k=top_k,
+            )
+
+
         if "int8wo" in quantization:
             quantize_(model, int8_weight_only())
         if "int8dq" in quantization:
@@ -488,7 +540,7 @@ if __name__ == '__main__':
         help=(
             'Which quantization techniques to apply: int8dq, int8wo, fp6, int4wo-<groupsize>, int4wo-<groupsize>-hqq, autoquant, '
             +'autoquant-int4, autoquant-float8, uintx-<nbits>-<groupsize>, uintx-<nbits>-<groupsize>-hqq, sparse-marlin, spinquant, '
-            +'embed-int8wo, marlin_qqq'
+            +'embed-int8wo, marlin_qqq, gemlite-<nbits>-<group_size>'
         )
     )
     parser.add_argument("--calibration_limit", type=int, default=10, help="Number of calibration examples")
