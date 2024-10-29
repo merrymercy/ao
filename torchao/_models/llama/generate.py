@@ -242,6 +242,9 @@ def main(
             assert group_size in [64, 128, 256], f"group_size needs to be in [64, 128, 256], got {group_size} for gemlite-<W_nbits>-<group_size>"
             assert precision == torch.float16, f"gemlite only supports float16 precision, got {precision}"
 
+            quant_config = BaseQuantizeConfig(nbits=W_nbits, group_size=group_size, quant_zero=False, quant_scale=False, axis=1)
+            quant_config['weight_quant_params']['optimize'] = False
+
             def replace_fn(mod):
                 if not isinstance(mod, torch.nn.Linear):
                     return mod
@@ -252,8 +255,7 @@ def main(
                 compute_dtype = mod.weight.dtype
                 input_dtype, output_dtype = DType.FP16, DType.FP16
 
-                quant_config = BaseQuantizeConfig(nbits=W_nbits, group_size=group_size, quant_zero=False, quant_scale=False, axis=1)
-                quant_config['weight_quant_params']['optimize'] = False
+
                 hqq_layer = HQQLinear(mod, quant_config=quant_config, compute_dtype=compute_dtype, device=device, del_orig=False)
                 orig_shape   = (out_features, in_features)
                 gemlite_linear = GemLiteLinearTriton(W_nbits=W_nbits, 

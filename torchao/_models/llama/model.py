@@ -19,7 +19,7 @@ def prepare_inputs_for_model(inps, max_new_tokens=1):
     if inps.dim() > 2:
         raise ValueError(f"Expected input to be of dim 1 or 2, but got {inps.dim()}")
 
-    input_pos = torch.arange(0, inps.size(-1), device=inps.device)
+    input_pos = torch.arange(0, inps.numel(), device=inps.device)
     return (inps.view(1, -1), input_pos)
 
 @dataclass
