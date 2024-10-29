@@ -227,12 +227,9 @@ def main(
         if "gemlite" in quantization:
             import gemlite
             import hqq
-            from gemlite.core import GemLiteLinearTriton, DType
+            from gemlite.core import GemLiteLinearTriton, DType, set_autotune
             from torchao.quantization.quant_api import _replace_with_custom_fn_if_matches_filter, _is_linear
             from hqq.core.quantize import HQQLinear, BaseQuantizeConfig
-            # from torchao.quantization.prototype.gemlite.core import GemLiteLinearTriton, DType
-            # from torchao.quantization.quant_api import _replace_with_custom_fn_if_matches_filter, _is_linear
-            # from hqq.core.quantize import HQQLinear, BaseQuantizeConfig
             _quant_args = quantization.split("-")
 
             W_nbits = int(_quant_args[1])
@@ -244,6 +241,8 @@ def main(
 
             quant_config = BaseQuantizeConfig(nbits=W_nbits, group_size=group_size, quant_zero=False, quant_scale=False, axis=1)
             quant_config['weight_quant_params']['optimize'] = False
+
+            set_autotune({'GEMV_REVSPLITK':True, 'GEMV':True, 'GEMM_SPLITK':True, 'GEMM':True}, exhaustive=False, use_cuda_graph=False)
 
             def replace_fn(mod):
                 if not isinstance(mod, torch.nn.Linear):
