@@ -260,7 +260,7 @@ def main(
                 gemlite_linear = GemLiteLinearTriton(W_nbits=W_nbits, 
                     group_size=group_size, in_features=in_features, out_features=out_features, 
                     input_dtype=input_dtype, output_dtype=output_dtype)
-                gemlite_linear.pack(hqq_layer.unpack().view(orig_shape), hqq_layer.meta['scale'], hqq_layer.meta['zero'], None)
+                gemlite_linear.pack(hqq_layer.unpack(dtype=torch.uint8).view(orig_shape), hqq_layer.meta['scale'], hqq_layer.meta['zero'], None)
                 return gemlite_linear
                 
 
