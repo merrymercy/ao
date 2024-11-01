@@ -234,10 +234,14 @@ def main(
 
             W_nbits = int(_quant_args[1])
             group_size = None if _quant_args[2] == 'None' else int(_quant_args[2]) #None is channel-wise 
+            is_symmetric = W_nbits == 8 and group_size is None
+
 
             assert W_nbits in [1, 2, 4, 8], f"W_nbits needs to be in [1, 2, 4, 8], got {W_nbits} for gemlite-<W_nbits>-<group_size>"
-            assert group_size in [64, 128, 256], f"group_size needs to be in [64, 128, 256], got {group_size} for gemlite-<W_nbits>-<group_size>"
+            assert group_size in [32, 64, 128, 256, 512, 1024, None], f"group_size needs to be in [32, 64, 128, 256, 512, 1024, None], got {group_size} for gemlite-<W_nbits>-<group_size>"
             assert precision == torch.float16, f"gemlite only supports float16 precision, got {precision}"
+
+
 
             quant_config = BaseQuantizeConfig(nbits=W_nbits, group_size=group_size, quant_zero=False, quant_scale=False, axis=1)
             quant_config['weight_quant_params']['optimize'] = False
@@ -256,16 +260,34 @@ def main(
 
 
                 hqq_layer = HQQLinear(mod, quant_config=quant_config, compute_dtype=compute_dtype, device=device, del_orig=False)
-                orig_shape   = (out_features, in_features)
-                gemlite_linear = GemLiteLinearTriton(W_nbits=W_nbits, 
-                    group_size=group_size, in_features=in_features, out_features=out_features, 
-                    input_dtype=input_dtype, output_dtype=output_dtype)
-                gemlite_linear.pack(hqq_layer.unpack(dtype=torch.uint8).view(orig_shape), hqq_layer.meta['scale'], hqq_layer.meta['zero'], None)
+                if(hqq_layer.meta["group_size"] is None):
+                    hqq_layer.meta["group_size"] = hqq_layer.in_features
+
+                gemlite_linear = GemLiteLinearTriton(hqq_layer.meta["nbits"], 
+                                group_size=hqq_layer.meta["group_size"], 
+                                in_features=hqq_layer.in_features, 
+                                out_features=hqq_layer.out_features, 
+                                input_dtype=DType.FP16, 
+                                output_dtype=DType.FP16, 
+                                )
+                orig_shape = hqq_layer.meta['shape']
+                W_q        = hqq_layer.unpack(dtype=torch.uint8).view(orig_shape) #Expects uint8 for Wn quantization!
+                scales     = hqq_layer.meta['scale'].clone()
+                zeros      = hqq_layer.meta['zero'].clone()
+                bias       = hqq_layer.bias.clone() if (hqq_layer.bias is not None) else None  
+                gemlite_linear.pack(W_q, scales, zeros, bias=bias, fma_mode=False)
+
+                del hqq_layer.W_q
+                del hqq_layer.meta
                 del hqq_layer
+                torch.cuda.empty_cache()
+
                 return gemlite_linear
                 
 
             _replace_with_custom_fn_if_matches_filter(model, replace_fn, _is_linear)
+            import gc
+            gc.collect()
 
             generate(
                 model,
