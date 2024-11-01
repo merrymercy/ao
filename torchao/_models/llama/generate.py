@@ -233,7 +233,7 @@ def main(
             _quant_args = quantization.split("-")
 
             W_nbits = int(_quant_args[1])
-            group_size = int(_quant_args[2])
+            group_size = None if _quant_args[2] == 'None' else int(_quant_args[2]) #None is channel-wise 
 
             assert W_nbits in [1, 2, 4, 8], f"W_nbits needs to be in [1, 2, 4, 8], got {W_nbits} for gemlite-<W_nbits>-<group_size>"
             assert group_size in [64, 128, 256], f"group_size needs to be in [64, 128, 256], got {group_size} for gemlite-<W_nbits>-<group_size>"
@@ -261,6 +261,7 @@ def main(
                     group_size=group_size, in_features=in_features, out_features=out_features, 
                     input_dtype=input_dtype, output_dtype=output_dtype)
                 gemlite_linear.pack(hqq_layer.unpack(dtype=torch.uint8).view(orig_shape), hqq_layer.meta['scale'], hqq_layer.meta['zero'], None)
+                del hqq_layer
                 return gemlite_linear
                 
 
