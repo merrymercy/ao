@@ -621,7 +621,7 @@ def int8_dynamic_activation_int4_weight(
     )
 
 
-def gemlite_uintx_weight_only(group_size=64, bit_width=4):
+def gemlite_uintx_weight_only(group_size: Optional[int]=64, bit_width=4):
     apply_fn = lambda weight: apply_gemlite_quant(weight, group_size, bit_width)
     return _get_linear_subclass_inserter(apply_fn)
 
@@ -630,7 +630,7 @@ def apply_gemlite_quant(weight, group_size=64, bit_width=4, use_hqq=True):
     from gemlite.core import GemLiteLinearTriton, DType, set_autotune
     import hqq
     from hqq.core.quantize import HQQLinear, BaseQuantizeConfig
-    from torchao.dtypes.affine_quantized_tensor import GemlitePackedLayout
+    from torchao.dtypes.uintx.gemlite_layout import GemlitePackedLayout
 
     
     assert weight.dtype == torch.float16, f"gemlite only works with dtype torch.float16 but got {weight.dtype}"
@@ -649,7 +649,7 @@ def apply_gemlite_quant(weight, group_size=64, bit_width=4, use_hqq=True):
     preserve_zero = False
     zero_point_dtype = torch.float16
     zero_point_domain = ZeroPointDomain.FLOAT
-    layout = GemlitePackedLayout(group_size=group_size)
+    layout = GemlitePackedLayout(group_size=group_size, bit_width=bit_width)
 
     return to_affine_quantized_intx(weight, mapping_type, block_size, target_dtype, quant_min, quant_max, eps, zero_point_dtype=zero_point_dtype, preserve_zero=preserve_zero, zero_point_domain=zero_point_domain, _layout=layout, use_hqq=use_hqq)
 

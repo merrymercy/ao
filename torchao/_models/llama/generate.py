@@ -16,6 +16,7 @@ import torch._inductor.config
 from torchao.utils import get_model_size_in_bytes
 from torchao.quantization.quant_primitives import MappingType
 from torchao.utils import TORCH_VERSION_AT_LEAST_2_5
+from torchao.utils import unwrap_tensor_subclass
 
 def device_sync(device):
     if "cuda" in device:
@@ -216,14 +217,19 @@ def main(
             fpx_weight_only,
             uintx_weight_only,
             autoquant,
-            unwrap_tensor_subclass,
             float8_weight_only,
             float8_dynamic_activation_float8_weight,
+            gemlite_uintx_weight_only,
         )
         from torchao.quantization.granularity import PerTensor, PerRow
         if "spinquant" in quantization:
             from torchao.prototype.spinquant import apply_spinquant
             apply_spinquant(model)
+        if "gemsub" in quantization:
+            _quant_args = quantization.split("-")
+            bit_width = int(_quant_args[1])
+            group_size = None if _quant_args[2] == 'None' else int(_quant_args[2]) # TODO is 'None' working?
+            quantize_(model, gemlite_uintx_weight_only(group_size, bit_width))
         if "gemlite" in quantization:
             import gemlite
             import hqq
@@ -263,7 +269,8 @@ def main(
                 if(hqq_layer.meta["group_size"] is None):
                     hqq_layer.meta["group_size"] = hqq_layer.in_features
 
-                gemlite_linear = GemLiteLinearTriton(hqq_layer.meta["nbits"], 
+                gemlite_linear = GemLiteLinearTriton(
+                                hqq_layer.meta["nbits"], 
                                 group_size=hqq_layer.meta["group_size"], 
                                 in_features=hqq_layer.in_features, 
                                 out_features=hqq_layer.out_features, 
