@@ -50,7 +50,7 @@ jobs:
             gpu-arch-type: "rocm"
             gpu-arch-version: "6.2"
             no-sudo: "1"
-            rocm-run: true
+            rocm-run: "1"
             
 
           - name: CPU 2.3
