@@ -18,6 +18,7 @@ from torchao.utils import (
     TORCH_VERSION_AT_LEAST_2_3,
     TORCH_VERSION_AT_LEAST_2_4,
     TORCH_VERSION_AT_LEAST_2_5,
+    TORCH_VERSION_AT_LEAST_2_6,
 )
 
 
@@ -161,7 +162,7 @@ class TestBlockSparseWeight(common_utils.TestCase):
 
 
 class TestQuantBlockSparseWeight(common_utils.TestCase):
-    @unittest.skipIf(not TORCH_VERSION_AFTER_2_5, "pytorch 2.6+ feature")
+    @unittest.skipIf(not TORCH_VERSION_AT_LEAST_2_6, "pytorch 2.6+ feature")
     @unittest.skipIf(not torch.cuda.is_available(), "Need CUDA available")
     @common_utils.parametrize("compile", [True, False])
     def test_sparse(self, compile):
@@ -193,7 +194,7 @@ class TestQuantBlockSparseWeight(common_utils.TestCase):
         quantize_(model_copy, int8_dynamic_activation_int8_weight())
         reference = model_copy(input)
 
-        from torchao.dtypes.affine_quantized_tensor import BlockSparseLayout
+        from torchao.dtypes import BlockSparseLayout
 
         quantize_(
             model,

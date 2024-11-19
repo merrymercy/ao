@@ -5,10 +5,13 @@
 # LICENSE file in the root directory of this source tree.
 
 import enum
+import logging
 from dataclasses import dataclass
 from typing import Optional
 
 import torch
+
+logger: logging.Logger = logging.getLogger()
 
 
 class ScalingType(enum.Enum):
@@ -69,8 +72,10 @@ class CastConfig:
                 self.static_scale is not None
             ), "static_scale must be specified for static scaling"
         if self.scaling_granularity is ScalingGranularity.AXISWISE:
-            assert self.scaling_type is ScalingType.DYNAMIC, \
-                "only dynamic scaling type is supported for axiswise scaling granularity"
+            assert (
+                self.scaling_type is ScalingType.DYNAMIC
+            ), "only dynamic scaling type is supported for axiswise scaling granularity"
+
 
 @dataclass(frozen=True)
 class DelayedScalingConfig:
@@ -220,8 +225,13 @@ class Float8LinearConfig:
     # For now, we use the checkpointing api to force the recomputation of fp8 weight in backward.
     # TODO(future PR): either enable by default or have a warning and set up the
     # tests so that the warning does not spam the CI stdout.
-
     force_recompute_fp8_weight_in_bwd: bool = False
+
+    # If True, we only use fp8-all-gather to reduce the communication cost.
+    # The gemm computation is still done in the original precision.
+    # `cast_config_weight` is used to decide how to cast the weight to fp8,
+    # other casting configs will be ignored.
+    use_fp8_all_gather_only: bool = False
 
     def __post_init__(self):
         # Populate the additional cast overrides, if the user did not specify them
@@ -231,16 +241,23 @@ class Float8LinearConfig:
         # to work.
         # Source of hack: https://stackoverflow.com/a/65959419/
         if self.cast_config_input_for_grad_weight is None:
-            object.__setattr__(self, "cast_config_input_for_grad_weight", self.cast_config_input)
+            object.__setattr__(
+                self, "cast_config_input_for_grad_weight", self.cast_config_input
+            )
         if self.cast_config_weight_for_grad_input is None:
-            object.__setattr__(self, "cast_config_weight_for_grad_input", self.cast_config_weight)
+            object.__setattr__(
+                self, "cast_config_weight_for_grad_input", self.cast_config_weight
+            )
         if self.cast_config_grad_output_for_grad_weight is None:
-            object.__setattr__(self, "cast_config_grad_output_for_grad_weight", self.cast_config_grad_output)
+            object.__setattr__(
+                self,
+                "cast_config_grad_output_for_grad_weight",
+                self.cast_config_grad_output,
+            )
 
         # float8 all-gather only supports tensorwise, in the future may support blockwise
         if self.cast_config_weight.scaling_granularity != ScalingGranularity.TENSORWISE:
-            assert not self.enable_fsdp_float8_all_gather, \
-                f"enable_fsdp_float8_all_gather only supports tensorwise scaling granularity, got {self.cast_config_weight.scaling_granularity}"
+            assert not self.enable_fsdp_float8_all_gather, f"enable_fsdp_float8_all_gather only supports tensorwise scaling granularity, got {self.cast_config_weight.scaling_granularity}"
 
         # save some characters in the compatibility checks below
         cc_i = self.cast_config_input
@@ -259,8 +276,21 @@ class Float8LinearConfig:
         ):
             is_disabled_1 = cc1.scaling_type is ScalingType.DISABLED
             is_disabled_2 = cc1.scaling_type is ScalingType.DISABLED
-            assert is_disabled_1 == is_disabled_2, \
-                f"incompatible operand precision for {gemm_name}"
+            assert (
+                is_disabled_1 == is_disabled_2
+            ), f"incompatible operand precision for {gemm_name}"
+
+        if self.use_fp8_all_gather_only:
+            assert self.enable_fsdp_float8_all_gather, "use_fp8_all_gather_only requires enable_fsdp_float8_all_gather to be True"
+
+        # See the comments around `force_recompute_fp8_weight_in_bwd` for more details of this warning.
+        if (
+            self.enable_fsdp_float8_all_gather
+            and not self.force_recompute_fp8_weight_in_bwd
+        ):
+            logger.warning(
+                "When using FSDP, it's recommended to enable config.force_recompute_fp8_weight_in_bwd."
+            )
 
 
 # Pre-made recipes for common configurations
@@ -308,7 +338,6 @@ def recipe_name_to_linear_config(
         )
 
     elif recipe_name is Float8LinearRecipeName.LW_AXISWISE_WITH_GW_HP:
-
         # lw's recipe for a modification on all-axiswise:
         #
         #   output_hp = input_fp8_axiswise_dim0 @ weight_t_axiswise_dim1
