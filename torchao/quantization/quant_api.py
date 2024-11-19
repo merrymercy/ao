@@ -646,12 +646,11 @@ def apply_gemlite_quant(weight, group_size=64, bit_width=4, use_hqq=True):
     quant_min = 0
     quant_max = (2**bit_width)-1
     eps = 1e-6
-    preserve_zero = False
     zero_point_dtype = torch.float16
     zero_point_domain = ZeroPointDomain.FLOAT
     layout = GemlitePackedLayout(group_size=group_size, bit_width=bit_width)
 
-    return to_affine_quantized_intx(weight, mapping_type, block_size, target_dtype, quant_min, quant_max, eps, zero_point_dtype=zero_point_dtype, preserve_zero=preserve_zero, zero_point_domain=zero_point_domain, _layout=layout, use_hqq=use_hqq)
+    return to_affine_quantized_intx(weight, mapping_type, block_size, target_dtype, quant_min, quant_max, eps, zero_point_dtype=zero_point_dtype, zero_point_domain=zero_point_domain, _layout=layout, use_hqq=use_hqq)
 
 
     # lin = torch.nn.Linear(out_features, in_features, dtype=weight.dtype, device=weight.device, bias=False)
@@ -667,29 +666,29 @@ def apply_gemlite_quant(weight, group_size=64, bit_width=4, use_hqq=True):
 
     # to_affine_quantized_intx_static(weight, scales, zero_points, block_size, target_dtype, quant_min, quant_max, eps,  zero_point_dtype=zero_point_dtype, preserve_zero=preserve_zero, zero_point_domain=zero_point_domain, _layout=layout)
     
-    in_features, out_features = weight.shape
-    compute_dtype = weight.dtype
-    input_dtype, output_dtype = DType.FP16, DType.FP16
+    # in_features, out_features = weight.shape
+    # compute_dtype = weight.dtype
+    # input_dtype, output_dtype = DType.FP16, DType.FP16
 
-    gemlite_linear = GemLiteLinearTriton(hqq_layer.meta["nbits"], 
-                    group_size=hqq_layer.meta["group_size"], 
-                    in_features=hqq_layer.in_features, 
-                    out_features=hqq_layer.out_features, 
-                    input_dtype=input_dtype, 
-                    output_dtype=output_dtype, 
-                    )
-    orig_shape = hqq_layer.meta['shape']
-    W_q        = hqq_layer.unpack(dtype=torch.uint8).view(orig_shape) #Expects uint8 for Wn quantization!
-    scales     = hqq_layer.meta['scale'].clone()
-    zeros      = hqq_layer.meta['zero'].clone()
-    # bias       = hqq_layer.bias.clone() if (hqq_layer.bias is not None) else None  
-    gemlite_linear.pack(W_q, scales, zeros, bias=None, fma_mode=False)
+    # gemlite_linear = GemLiteLinearTriton(hqq_layer.meta["nbits"], 
+    #                 group_size=hqq_layer.meta["group_size"], 
+    #                 in_features=hqq_layer.in_features, 
+    #                 out_features=hqq_layer.out_features, 
+    #                 input_dtype=input_dtype, 
+    #                 output_dtype=output_dtype, 
+    #                 )
+    # orig_shape = hqq_layer.meta['shape']
+    # W_q        = hqq_layer.unpack(dtype=torch.uint8).view(orig_shape) #Expects uint8 for Wn quantization!
+    # scales     = hqq_layer.meta['scale'].clone()
+    # zeros      = hqq_layer.meta['zero'].clone()
+    # # bias       = hqq_layer.bias.clone() if (hqq_layer.bias is not None) else None  
+    # gemlite_linear.pack(W_q, scales, zeros, bias=None, fma_mode=False)
 
-    del hqq_layer.W_q
-    del hqq_layer.meta
-    del hqq_layer
-    del lin
-    torch.cuda.empty_cache
+    # del hqq_layer.W_q
+    # del hqq_layer.meta
+    # del hqq_layer
+    # del lin
+    # torch.cuda.empty_cache
     
     # JAM this into AQT
 

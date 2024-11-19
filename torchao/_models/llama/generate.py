@@ -226,10 +226,20 @@ def main(
             from torchao.prototype.spinquant import apply_spinquant
             apply_spinquant(model)
         if "gemsub" in quantization:
+            print("quant mode: ", quantization)
             _quant_args = quantization.split("-")
             bit_width = int(_quant_args[1])
             group_size = None if _quant_args[2] == 'None' else int(_quant_args[2]) # TODO is 'None' working?
             quantize_(model, gemlite_uintx_weight_only(group_size, bit_width))
+            generate(
+                model,
+                encode_tokens(tokenizer, prompt, bos=True, device=device),
+                max_new_tokens,
+                batch_size,
+                interactive=False,
+                temperature=temperature,
+                top_k=top_k,
+            )
         if "gemlite" in quantization:
             import gemlite
             import hqq
@@ -240,7 +250,6 @@ def main(
 
             W_nbits = int(_quant_args[1])
             group_size = None if _quant_args[2] == 'None' else int(_quant_args[2]) #None is channel-wise 
-            is_symmetric = W_nbits == 8 and group_size is None
 
 
             assert W_nbits in [1, 2, 4, 8], f"W_nbits needs to be in [1, 2, 4, 8], got {W_nbits} for gemlite-<W_nbits>-<group_size>"
@@ -283,7 +292,7 @@ def main(
                 zeros      = hqq_layer.meta['zero'].clone()
                 bias       = hqq_layer.bias.clone() if (hqq_layer.bias is not None) else None  
                 gemlite_linear.pack(W_q, scales, zeros, bias=bias, fma_mode=False)
-
+                # import fbvscode; fbvscode.set_trace()
                 del hqq_layer.W_q
                 del hqq_layer.meta
                 del hqq_layer
