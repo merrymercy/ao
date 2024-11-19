@@ -77,7 +77,6 @@ jobs:
             gpu-arch-type: "rocm"
             gpu-arch-version: "6.2"
             no-sudo: "1"
-            rocm-run: "1"
 
           - name: CPU 2.3
             runs-on: linux.4xlarge
