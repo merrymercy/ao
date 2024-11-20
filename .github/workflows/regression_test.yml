@@ -10,6 +10,7 @@ on:
     branches:
       - main
       - 'gh/**'
+      - msaroufim-patch-21
 
 concurrency:
   group: regression_test-${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.run_number || github.ref }}
