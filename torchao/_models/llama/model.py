@@ -245,8 +245,10 @@ class Transformer(nn.Module):
         x = self.tok_embeddings(idx)
 
         for i, layer in enumerate(self.layers):
-            x = layer(x, input_pos, freqs_cis, mask)
-        x = self.norm(x)
+            x_new = layer(x, input_pos, freqs_cis, mask)
+            if torch.isnan(x_new).sum()>0:
+                import fbvscode; fbvscode.set_trace()
+        x = self.norm(x_new)
         logits = self.output(x)
         return logits
 
@@ -313,7 +315,7 @@ class Attention(nn.Module):
 
         k = k.repeat_interleave(self.n_head // self.n_local_heads, dim=1)
         v = v.repeat_interleave(self.n_head // self.n_local_heads, dim=1)
-        if mask is not None:
+        if mask is not None:            
             y = F.scaled_dot_product_attention(q, k, v, attn_mask=mask, dropout_p=0.0)
         else:
             y = F.scaled_dot_product_attention(q, k, v, dropout_p=0.0, is_causal=True)

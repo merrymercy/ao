@@ -74,7 +74,7 @@ def decode_n_tokens(model: Transformer, cur_token: torch.Tensor, input_pos: torc
             )
             next_token, next_prob = next_token.clone(), next_prob.clone()
             input_pos += 1
-            new_tokens.append(next_token)
+            new_tokens.append(next_token.clone())
             callback(new_tokens[-1])
             new_probs.append(next_prob)
             cur_token = next_token
@@ -181,7 +181,7 @@ def main(
 ) -> None:
     """Generates text samples based on a pre-trained Transformer model and tokenizer.
     """
-
+    import fbvscode; fbvscode.set_trace()
     torchao.quantization.utils.recommended_inductor_config_setter()
 
     assert checkpoint_path.is_file(), checkpoint_path
@@ -226,11 +226,27 @@ def main(
             from torchao.prototype.spinquant import apply_spinquant
             apply_spinquant(model)
         if "gemsub" in quantization:
-            print("quant mode: ", quantization)
+            import os, pwd
+            import gemlite
+            from gemlite.core import GemLiteLinearTriton, set_autotune
+            
             _quant_args = quantization.split("-")
-            bit_width = int(_quant_args[1])
-            group_size = None if _quant_args[2] == 'None' else int(_quant_args[2]) # TODO is 'None' working?
-            quantize_(model, gemlite_uintx_weight_only(group_size, bit_width))
+            bit_width = int(_quant_args[-2])
+            group_size = None if _quant_args[-1] == 'None' else int(_quant_args[-1]) # TODO is 'None' working?
+            try:
+                packing_bitwidth = int(_quant_args[-3])
+            except:
+                packing_bitwidth = 8
+            set_autotune({'GEMV_REVSPLITK':True, 'GEMV':True, 'GEMM_SPLITK':True, 'GEMM':True}, exhaustive=False, use_cuda_graph=False)
+
+            quantize_(model, gemlite_uintx_weight_only(group_size, bit_width, packing_bitwidth))
+
+            # try to load gemlite kernel config
+            try:
+                GemLiteLinearTriton.load_config(f"/tmp/{pwd.getpwuid(os.getuid()).pw_gecos}_gemlite.json")
+            except:
+                pass
+            print("running calibration")
             generate(
                 model,
                 encode_tokens(tokenizer, prompt, bos=True, device=device),
@@ -240,6 +256,8 @@ def main(
                 temperature=temperature,
                 top_k=top_k,
             )
+
+            GemLiteLinearTriton.cache_config(f"/tmp/{pwd.getpwuid(os.getuid()).pw_gecos}_gemlite.json")
         if "gemlite" in quantization:
             import gemlite
             import hqq
@@ -248,8 +266,8 @@ def main(
             from hqq.core.quantize import HQQLinear, BaseQuantizeConfig
             _quant_args = quantization.split("-")
 
-            W_nbits = int(_quant_args[1])
-            group_size = None if _quant_args[2] == 'None' else int(_quant_args[2]) #None is channel-wise 
+            W_nbits = int(_quant_args[-2])
+            group_size = None if _quant_args[-1] == 'None' else int(_quant_args[-1]) #None is channel-wise 
 
 
             assert W_nbits in [1, 2, 4, 8], f"W_nbits needs to be in [1, 2, 4, 8], got {W_nbits} for gemlite-<W_nbits>-<group_size>"
@@ -291,8 +309,8 @@ def main(
                 scales     = hqq_layer.meta['scale'].clone()
                 zeros      = hqq_layer.meta['zero'].clone()
                 bias       = hqq_layer.bias.clone() if (hqq_layer.bias is not None) else None  
-                gemlite_linear.pack(W_q, scales, zeros, bias=bias, fma_mode=False)
-                # import fbvscode; fbvscode.set_trace()
+                gemlite_linear.pack(W_q, scales, zeros, bias=bias, fma_mode=False, packing_bitwidth=8, contiguous=True)
+                import fbvscode; fbvscode.set_trace()
                 del hqq_layer.W_q
                 del hqq_layer.meta
                 del hqq_layer
@@ -505,7 +523,11 @@ def main(
                 tok_list = y[0].tolist()
                 # truncate text after end of string token
                 tokens = tok_list if not tokenizer.eos_id() in tok_list else tok_list[:tok_list.index(tokenizer.eos_id())]
-                print(tokenizer.decode(tokens))
+                try:
+                    print(tokenizer.decode(tokens))
+                except:
+                    breakpoint()
+                    print("huh")
         else:
             print()
         tokens_generated = (y.size(-1) - prompt_length)
@@ -580,7 +602,7 @@ if __name__ == '__main__':
         help=(
             'Which quantization techniques to apply: int8dq, int8wo, fp6, int4wo-<groupsize>, int4wo-<groupsize>-hqq, autoquant, '
             +'autoquant-int4, autoquant-float8, uintx-<nbits>-<groupsize>, uintx-<nbits>-<groupsize>-hqq, sparse-marlin, spinquant, '
-            +'embed-int8wo, marlin_qqq, gemlite-<nbits>-<group_size>'
+            +'embed-int8wo, marlin_qqq, gemsub-<packing_bitwidth>-<nbits>-<group_size>'
         )
     )
     parser.add_argument("--calibration_limit", type=int, default=10, help="Number of calibration examples")
