@@ -196,6 +196,9 @@ class GemliteAQTTensorImpl(TensorCoreTiledAQTTensorImpl):
 
 
 def _matmul_type_fn(batch_size: int, bit_width) -> str:
+    # print("only gemm")
+    # return 'GEMM'
+    
     if batch_size > 64:
         return 'GEMM'
     elif batch_size > 1:
@@ -203,7 +206,7 @@ def _matmul_type_fn(batch_size: int, bit_width) -> str:
     elif bit_width<8:
         return 'GEMV_REVSPLITK'
     else:
-        return 'GEMV_SPLITK'
+        return 'GEMV'
 
 
 def _linear_fp_act_int4_weight_gemlite_impl(input_tensor, weight_tensor, bias):

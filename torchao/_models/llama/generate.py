@@ -181,7 +181,6 @@ def main(
 ) -> None:
     """Generates text samples based on a pre-trained Transformer model and tokenizer.
     """
-    import fbvscode; fbvscode.set_trace()
     torchao.quantization.utils.recommended_inductor_config_setter()
 
     assert checkpoint_path.is_file(), checkpoint_path
@@ -310,7 +309,7 @@ def main(
                 zeros      = hqq_layer.meta['zero'].clone()
                 bias       = hqq_layer.bias.clone() if (hqq_layer.bias is not None) else None  
                 gemlite_linear.pack(W_q, scales, zeros, bias=bias, fma_mode=False, packing_bitwidth=8, contiguous=True)
-                import fbvscode; fbvscode.set_trace()
+
                 del hqq_layer.W_q
                 del hqq_layer.meta
                 del hqq_layer

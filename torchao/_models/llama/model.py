@@ -246,9 +246,11 @@ class Transformer(nn.Module):
 
         for i, layer in enumerate(self.layers):
             x_new = layer(x, input_pos, freqs_cis, mask)
-            if torch.isnan(x_new).sum()>0:
-                import fbvscode; fbvscode.set_trace()
-        x = self.norm(x_new)
+            # if torch.isnan(x_new).sum()>0:
+            #     import fbvscode; fbvscode.set_trace()
+            x = x_new
+
+        x = self.norm(x)
         logits = self.output(x)
         return logits
 

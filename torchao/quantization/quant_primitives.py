@@ -1188,8 +1188,8 @@ def choose_qparams_and_quantize_affine_hqq(
             verbose=verbose,
         )
     else:
-        zero=zero.to(torch.float16)
-        scale=scale.to(torch.float16)
+        zero=zero.to(compute_dtype)
+        scale=scale.to(compute_dtype)
         W_q = torch.round(W * scale + zero).clamp(min_max[0], min_max[1])
 
     # Store meta-data (we invert the scale for dequantization)
