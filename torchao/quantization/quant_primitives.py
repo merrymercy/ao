@@ -1204,8 +1204,12 @@ def choose_qparams_and_quantize_affine_hqq(
         )
     else:
         W_q = W_q.reshape(shape)
-        scale=scale.reshape(-1, shape[-1])
-        zero=zero.reshape(-1, shape[-1])
+        if axis==1:
+            scale=scale.reshape(shape[0], -1)
+            zero=zero.reshape(shape[0], -1)
+        else:
+            scale=scale.reshape(-1, shape[-1])
+            zero=zero.reshape(-1, shape[-1])
     # Make sure all the weights are in the right compute_dtype/device
     W_q = W_q.to(dtype=torch.uint8, device=device)
     scale = scale.to(dtype=compute_dtype, device=device)

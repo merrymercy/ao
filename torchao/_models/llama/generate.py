@@ -228,7 +228,7 @@ def main(
             import os, pwd
             import gemlite
             from gemlite.core import GemLiteLinearTriton, set_autotune
-            
+            torch._dynamo.config.inline_inbuilt_nn_modules = False
             _quant_args = quantization.split("-")
             bit_width = int(_quant_args[-2])
             group_size = None if _quant_args[-1] == 'None' else int(_quant_args[-1]) # TODO is 'None' working?
@@ -294,7 +294,7 @@ def main(
                 hqq_layer = HQQLinear(mod, quant_config=quant_config, compute_dtype=compute_dtype, device=device, del_orig=False)
                 if(hqq_layer.meta["group_size"] is None):
                     hqq_layer.meta["group_size"] = hqq_layer.in_features
-
+                import fbvscode; fbvscode.set_trace()
                 gemlite_linear = GemLiteLinearTriton(
                                 hqq_layer.meta["nbits"], 
                                 group_size=hqq_layer.meta["group_size"], 

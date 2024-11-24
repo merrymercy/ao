@@ -18,12 +18,12 @@ def apply_gemlite_quant(weight, group_size=64, bit_width=4, packing_bitwidth=8, 
     from torchao.dtypes.uintx.gemlite_layout import GemlitePackedLayout
 
     if contiguous is None:
-        contiguous = True if bit_width == 4 else False
+        contiguous = True if bit_width < 8 else False
     
     assert weight.dtype == torch.float16, f"gemlite only works with dtype torch.float16 but got {weight.dtype}"
     assert group_size in [32, 64, 128, 256, 512, 1024, None]
 
-    in_features, out_features = weight.shape
+    out_features, in_features = weight.shape
     group_size = in_features if group_size is None else group_size
 
     mapping_type = MappingType.ASYMMETRIC
@@ -195,7 +195,7 @@ class GemliteAQTTensorImpl(TensorCoreTiledAQTTensorImpl):
         return self._layout
 
 
-def _matmul_type_fn(batch_size: int, bit_width) -> str:
+def _matmul_type_fn(batch_size: int, bit_width: int, elements_per_sample: int) -> str:
     # print("only gemm")
     # return 'GEMM'
     
@@ -203,6 +203,8 @@ def _matmul_type_fn(batch_size: int, bit_width) -> str:
         return 'GEMM'
     elif batch_size > 1:
         return 'GEMM_SPLITK'
+    elif elements_per_sample == 1:
+        return 'GEMV_SPLITK'
     elif bit_width<8:
         return 'GEMV_REVSPLITK'
     else:
@@ -214,7 +216,7 @@ def _linear_fp_act_int4_weight_gemlite_impl(input_tensor, weight_tensor, bias):
     input_tensor, scaled_input = weight_tensor.tensor_impl.gemlite_kwargs["scale_activations"](input_tensor)
     batch_size = input_tensor.view(-1, input_tensor.shape[-1]).shape[0]
     out_shape = input_tensor.shape[:-1] + (weight_tensor.shape[0],)
-    matmul_type = _matmul_type_fn(batch_size, weight_tensor._layout.bit_width)
+    matmul_type = _matmul_type_fn(batch_size, weight_tensor._layout.bit_width, weight_tensor.tensor_impl.gemlite_kwargs["elements_per_sample"])
 
     out = (
         GEMLITE_TRITON_MAPPING[matmul_type]
