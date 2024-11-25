@@ -628,6 +628,6 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     main(
-        args.prefill_size, args.prompt, args.interactive, args.num_samples, args.max_new_tokens, args.top_k,
+        args.prefill_size, args.prompt, args.interactive, args.num_samples, args.max_new_tokens, args.batch_size, args.top_k,
         args.temperature, args.checkpoint_path, args.quantization, args.sparsity, args.kv_cache_quantization, args.cache_size, args.linear_causal_mask, args.save, args.compile, args.compile_prefill, args.profile, args.memory_profile, args.device, args.precision, args.write_result
     )
