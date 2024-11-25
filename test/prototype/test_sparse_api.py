@@ -21,7 +21,6 @@ from torchao.utils import (
     TORCH_VERSION_AT_LEAST_2_6,
 )
 
-from torch.sparse import SparseSemiStructuredTensor
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO

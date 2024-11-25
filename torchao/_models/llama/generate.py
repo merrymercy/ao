@@ -157,7 +157,7 @@ def _load_model(checkpoint_path, device, precision):
 B_INST, E_INST = "[INST]", "[/INST]"
 
 def main(
-    prefill_size: int = 0,
+    ttft_prefill_size: int = 0,
     prompt: str = "Hello, my name is",
     interactive: bool = False,
     num_samples: int = 5,
@@ -183,11 +183,11 @@ def main(
     """Generates text samples based on a pre-trained Transformer model and tokenizer.
     """
 
-    if prefill_size > 0:
+    if ttft_prefill_size > 0:
         print("Running TTFT benchmark!")
-        assert max_new_tokens == 1, "prefill_size only supports max_new_tokens=1"
+        assert max_new_tokens == 1, "ttft_prefill_size only supports max_new_tokens=1"
         # create prompt of prefill size ttft
-        prompt = "prompt " * (int(prefill_size)-3)
+        prompt = "prompt " * (int(ttft_prefill_size)-3)
 
     torchao.quantization.utils.recommended_inductor_config_setter()
 
@@ -567,7 +567,7 @@ def main(
         result_txt += f"--precision {precision} "
         result_txt += f"--compile " if compile else ""
         result_txt += f"--compile_prefill " if compile_prefill else ""
-        result_txt += f"--prefill_size {prefill_size}" if prefill_size else ""
+        result_txt += f"--ttft_prefill_size {ttft_prefill_size}" if ttft_prefill_size else ""
         result_txt += f"--profile {profile} " if profile else ""
         result_txt += f"--profile {memory_profile} " if memory_profile else ""
         result_txt += f"--interactive " if interactive else ""
@@ -589,7 +589,7 @@ def main(
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description='Your CLI description.')
-    parser.add_argument('--prefill_size', type=int, default=0, help='Whether to run in ttft mode')
+    parser.add_argument('--ttft_prefill_size', type=int, default=0, help='Whether to run in ttft mode')
     parser.add_argument('--prompt', type=str, default="Hello, my name is", help='Input prompt.')
     parser.add_argument('--interactive', action='store_true', help='Whether to launch in interactive mode')
     parser.add_argument('--num_samples', type=int, default=5, help='Number of samples.')
@@ -625,6 +625,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
     print(args)
     main(
-        args.prefill_size, args.prompt, args.interactive, args.num_samples, args.max_new_tokens, args.batch_size, args.top_k,
+        args.ttft_prefill_size, args.prompt, args.interactive, args.num_samples, args.max_new_tokens, args.batch_size, args.top_k,
         args.temperature, args.checkpoint_path, args.quantization, args.sparsity, args.kv_cache_quantization, args.cache_size, args.linear_causal_mask, args.save, args.compile, args.compile_prefill, args.profile, args.memory_profile, args.device, args.precision, args.write_result
     )
