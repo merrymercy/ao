@@ -168,8 +168,6 @@ def main(
     checkpoint_path: Path = Path("checkpoints/meta-Transformer/Transformer-2-7b-chat-hf/model.pth"),
     quantization: Optional[str] = None,
     sparsity: Optional[str] = None,
-    calibration_limit: int = 10,
-    calibration_seq_length: int = 256,
     kv_cache_quantization: bool = False,
     cache_size: Optional[int] = None,
     linear_causal_mask: bool=False,
@@ -612,8 +610,6 @@ if __name__ == '__main__':
             'Which sparsity techniques to apply: semi-structured'
         )
     )
-    parser.add_argument("--calibration_limit", type=int, default=10, help="Number of calibration examples")
-    parser.add_argument("--calibration_seq_length", type=int, default=256, help="Sequence length for calibration")
     parser.add_argument('--kv_cache_quantization', action='store_true', help='Whether to quantize the KV cache')
     parser.add_argument('--cache_size', type=int, default=None, help='Force size of cache to be a certain number of tokens, if not set, will use max_new_tokens+prompt_size')
     parser.add_argument('--linear_causal_mask', action='store_true', help='Whether to use the memory efficient, but slightly less fast, linear causal mask (important for long context lengths)')
@@ -627,6 +623,7 @@ if __name__ == '__main__':
     parser.add_argument('--write_result', type=Path, default=None, help='Path where to write the result')
 
     args = parser.parse_args()
+    print(args)
     main(
         args.prefill_size, args.prompt, args.interactive, args.num_samples, args.max_new_tokens, args.batch_size, args.top_k,
         args.temperature, args.checkpoint_path, args.quantization, args.sparsity, args.kv_cache_quantization, args.cache_size, args.linear_causal_mask, args.save, args.compile, args.compile_prefill, args.profile, args.memory_profile, args.device, args.precision, args.write_result

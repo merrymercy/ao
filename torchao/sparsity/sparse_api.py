@@ -7,7 +7,7 @@ from torch.sparse import to_sparse_semi_structured
 from torchao.quantization.quant_api import (
     _get_linear_subclass_inserter,
     _is_linear,
-    _replace_with_custom_fn_if_matches_filter,
+    quantize_,
 )
 
 
