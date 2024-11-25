@@ -65,6 +65,9 @@ class SAM2ImagePredictor:
             (64, 64),
         ]
 
+        self._image_dtype = torch.float32
+        self._transforms_device = "cpu"
+
     @classmethod
     def from_pretrained(cls, model_id: str, **kwargs) -> "SAM2ImagePredictor":
         """
@@ -107,14 +110,20 @@ class SAM2ImagePredictor:
         else:
             raise NotImplementedError("Image format not supported")
 
-        input_image = self._transforms(image)
-        input_image = input_image[None, ...].to(self.device)
+        input_image = self._transforms.to_tensor(image)
+        # NOTE: Doing these transforms on the GPU changes the numerics
+        input_image = input_image.to(device=self._transforms_device)
+        input_image = self._transforms.transforms(input_image)
+        input_image = input_image.to(device=self.device)
+        # input_image = self._transforms.transforms(input_image)
+        input_image = input_image[None, ...].to(dtype=self._image_dtype)
 
         assert (
             len(input_image.shape) == 4 and input_image.shape[1] == 3
         ), f"input_image must be of size 1x3xHxW, got {input_image.shape}"
         logging.info("Computing image embeddings for the provided image...")
-        backbone_out = self.model.forward_image(input_image)
+        with torch.autograd.profiler.record_function("forward_image"):
+            backbone_out = self.model.forward_image(input_image)
         _, vision_feats, _, _ = self.model._prepare_backbone_features(backbone_out)
         # Add no_mem_embed, which is added to the lowest rest feat. map during training on videos
         if self.model.directly_add_no_mem_embed:
@@ -149,16 +158,20 @@ class SAM2ImagePredictor:
                 image, np.ndarray
             ), "Images are expected to be an np.ndarray in RGB format, and of shape  HWC"
             self._orig_hw.append(image.shape[:2])
-        # Transform the image to the form expected by the model
-        img_batch = self._transforms.forward_batch(image_list)
-        img_batch = img_batch.to(self.device)
+        with torch.autograd.profiler.record_function("forward_batch"):
+            # Transform the image to the form expected by the model
+            img_batch = self._transforms.forward_batch(image_list)
+            img_batch = img_batch.to(self.device)
+            img_batch = img_batch.to(self._image_dtype)
         batch_size = img_batch.shape[0]
         assert (
             len(img_batch.shape) == 4 and img_batch.shape[1] == 3
         ), f"img_batch must be of size Bx3xHxW, got {img_batch.shape}"
         logging.info("Computing image embeddings for the provided images...")
-        backbone_out = self.model.forward_image(img_batch)
-        _, vision_feats, _, _ = self.model._prepare_backbone_features(backbone_out)
+        with torch.autograd.profiler.record_function("forward_image"):
+            backbone_out = self.model.forward_image(img_batch)
+        with torch.autograd.profiler.record_function("_prepare_backbone_features"):
+            _, vision_feats, _, _ = self.model._prepare_backbone_features(backbone_out)
         # Add no_mem_embed, which is added to the lowest rest feat. map during training on videos
         if self.model.directly_add_no_mem_embed:
             vision_feats[-1] = vision_feats[-1] + self.model.no_mem_embed
@@ -384,6 +397,21 @@ class SAM2ImagePredictor:
                 "An image must be set with .set_image(...) before mask prediction."
             )
 
+        with torch.autograd.profiler.record_function("_predict_masks"):
+            low_res_masks, iou_predictions = self._predict_masks(point_coords, point_labels, boxes, mask_input, multimask_output, return_logits, img_idx)
+        with torch.autograd.profiler.record_function("_predict_masks_postprocess"):
+            masks, low_res_masks = self._predict_masks_postprocess(low_res_masks, img_idx, iou_predictions, return_logits)
+            return masks, iou_predictions, low_res_masks
+
+    def _predict_masks(
+            self,
+            point_coords,
+            point_labels,
+            boxes: Optional[torch.Tensor] = None,
+            mask_input: Optional[torch.Tensor] = None,
+            multimask_output: bool = True,
+            return_logits: bool = False,
+            img_idx: int = -1):
         if point_coords is not None:
             concat_points = (point_coords, point_labels)
         else:
@@ -403,39 +431,51 @@ class SAM2ImagePredictor:
             else:
                 concat_points = (box_coords, box_labels)
 
-        sparse_embeddings, dense_embeddings = self.model.sam_prompt_encoder(
-            points=concat_points,
-            boxes=None,
-            masks=mask_input,
-        )
+        with torch.autograd.profiler.record_function("self.model.sam_prompt_encoder"):
+            sparse_embeddings, dense_embeddings = self.model.sam_prompt_encoder(
+                points=concat_points,
+                boxes=None,
+                masks=mask_input,
+            )
 
         # Predict masks
         batched_mode = (
             concat_points is not None and concat_points[0].shape[0] > 1
         )  # multi object prediction
         high_res_features = [
-            feat_level[img_idx].unsqueeze(0)
+            feat_level[img_idx].unsqueeze(0).clone()
             for feat_level in self._features["high_res_feats"]
         ]
-        low_res_masks, iou_predictions, _, _ = self.model.sam_mask_decoder(
-            image_embeddings=self._features["image_embed"][img_idx].unsqueeze(0),
-            image_pe=self.model.sam_prompt_encoder.get_dense_pe(),
-            sparse_prompt_embeddings=sparse_embeddings,
-            dense_prompt_embeddings=dense_embeddings,
-            multimask_output=multimask_output,
-            repeat_image=batched_mode,
-            high_res_features=high_res_features,
-        )
+        with torch.autograd.profiler.record_function("self.model.sam_mask_decoder"):
+            low_res_masks, iou_predictions, _, _ = self.model.sam_mask_decoder(
+                image_embeddings=self._features["image_embed"][img_idx].unsqueeze(0).clone(),
+                image_pe=self.model.sam_prompt_encoder.get_dense_pe().clone(),
+                sparse_prompt_embeddings=sparse_embeddings.clone(),
+                dense_prompt_embeddings=dense_embeddings.clone(),
+                multimask_output=multimask_output,
+                repeat_image=batched_mode,
+                high_res_features=high_res_features,
+            )
 
-        # Upscale the masks to the original image resolution
-        masks = self._transforms.postprocess_masks(
-            low_res_masks, self._orig_hw[img_idx]
-        )
+        return low_res_masks, iou_predictions
+
+    def _predict_masks_postprocess(self, low_res_masks, img_idx, return_logits, channel_1=False):
+        # TODO: Might want to defer this until after data["iou_preds"] > self.pred_iou_thresh
+        with torch.autograd.profiler.record_function("self._transforms.postprocess_masks"):
+            # Upscale the masks to the original image resolution
+            if channel_1:
+                masks = self._transforms.postprocess_masks_1_channel(
+                    low_res_masks, self._orig_hw[img_idx], self._image_dtype
+                )
+            else:
+                masks = self._transforms.postprocess_masks(
+                    low_res_masks, self._orig_hw[img_idx], self._image_dtype
+                )
         low_res_masks = torch.clamp(low_res_masks, -32.0, 32.0)
         if not return_logits:
             masks = masks > self.mask_threshold
 
-        return masks, iou_predictions, low_res_masks
+        return masks, low_res_masks
 
     def get_image_embedding(self) -> torch.Tensor:
         """

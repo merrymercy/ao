@@ -77,7 +77,7 @@ import torchao.quantization
 # After the first forward pass (when quantization was done)
 from torchao.quantization.autoquant import AUTOQUANT_CACHE
 with open("quantization-cache.pkl", "wb") as f:
-    pickle.dump(AUTOQUANT_CACHE)
+    pickle.dump(AUTOQUANT_CACHE, f)
 
 # On load
 from torchao.quantization.autoquant import AUTOQUANT_CACHE
@@ -96,7 +96,7 @@ be applied individually. While there are a large variety of quantization apis, t
 from torchao.quantization import quantize_, int4_weight_only
 group_size = 32
 
-# you can enable [hqq](https://ithub.com/mobiusml/hqq/tree/master) quantization which is expected to improves accuracy through
+# you can enable [hqq](https://github.com/mobiusml/hqq/tree/master) quantization which is expected to improves accuracy through
 # use_hqq flag for `int4_weight_only` quantization
 use_hqq = False
 quantize_(model, int4_weight_only(group_size=group_size, use_hqq=use_hqq))
@@ -308,6 +308,16 @@ Sparse-Marlin 2:4 is an optimized GPU kernel that extends the Mixed Auto-Regress
 |             | int4wo-64-sparse-marlin |  226.02       |  689.20                 |  5.32            |  3.05           |
 
 More details can be found [here](../sparsity/README.md)
+
+### Marlin QQQ
+
+Marlin QQQ is an optimized GPU kernel that supports W4A8 mixed precision GEMM. For more details about Marlin QQQ, please refer to [paper](https://arxiv.org/pdf/2406.09904).
+
+| Model       | Technique               | Tokens/Second | Memory Bandwidth (GB/s) | Peak Memory (GB) | Model Size (GB) |
+| ----------- | ----------------------- | ------------- | ----------------------- | ---------------- | --------------- |
+| Llama-2-7B  | Base (float16)          |  112.45       |  1486.00                | 13.93            | 13.21           |
+|             | w4a8                    |  197.45       |  653.50                 | 4.79            |  3.31           |
+|             | w4a8-g128               |  187.62       |  640.32                 | 4.82            |  3.41           |
 
 ### UINTx Quantization
 We're trying to develop kernels for low bit quantization for intx quantization formats. While the current performance is not ideal, we're hoping to continue to iterate on these kernels to improve their performance.
