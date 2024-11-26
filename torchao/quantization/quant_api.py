@@ -621,8 +621,10 @@ def int8_dynamic_activation_int4_weight(
     )
 
 
-def gemlite_uintx_weight_only(group_size: Optional[int]=64, bit_width=4, packing_bitwidth=8, contiguous=None, use_hqq=True):
+def gemlite_uintx_weight_only(group_size: Optional[int]=64, bit_width=4, packing_bitwidth=8, contiguous=None):
     from torchao.dtypes.uintx.gemlite_layout import apply_gemlite_quant
+    use_hqq = True if bit_width == 4 else False
+    # hqq only works with affine quant, bit_width=8 requires symmetric quant
     apply_fn = lambda weight: apply_gemlite_quant(weight, group_size, bit_width, packing_bitwidth, contiguous, use_hqq)
     return _get_linear_subclass_inserter(apply_fn)
 

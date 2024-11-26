@@ -12,29 +12,40 @@ from torchao.dtypes.utils import is_device, Layout
 aten = torch.ops.aten
 
 def apply_gemlite_quant(weight, group_size=64, bit_width=4, packing_bitwidth=8, contiguous=None, use_hqq=True):
-    assert use_hqq, "gemlite not working without hqq currently"
     from torchao.quantization.quant_primitives import ZeroPointDomain, MappingType
     from torchao.dtypes.affine_quantized_tensor import to_affine_quantized_intx
     from torchao.dtypes.uintx.gemlite_layout import GemlitePackedLayout
 
     if contiguous is None:
         contiguous = True if bit_width < 8 else False
-    
+
+    assert packing_bitwidth in [8, 16, 32], f"gemlite needs packing_bitwidth in [8, 16, 32] but got {packing_bitwidth}"
     assert weight.dtype == torch.float16, f"gemlite only works with dtype torch.float16 but got {weight.dtype}"
     assert group_size in [32, 64, 128, 256, 512, 1024, None]
+    assert group_size is None or bit_width != 8, "gemlite only works with group_size=None for bit_width=8"
 
     out_features, in_features = weight.shape
     group_size = in_features if group_size is None else group_size
 
-    mapping_type = MappingType.ASYMMETRIC
-    block_size = (1, group_size)
-    target_dtype = torch.uint8
-    eps = 1e-6
-    quant_min = 0
-    quant_max = (2**bit_width)-1
-    eps = 1e-6
-    zero_point_dtype = torch.float16
-    zero_point_domain = ZeroPointDomain.FLOAT
+    if bit_width != 8:
+        mapping_type = MappingType.ASYMMETRIC
+        block_size = (1, group_size)
+        target_dtype = torch.uint8
+        eps = 1e-6
+        quant_min = 0
+        quant_max = (2**bit_width)-1
+        eps = 1e-6
+        zero_point_dtype = torch.float16
+        zero_point_domain = ZeroPointDomain.FLOAT
+    else:
+        mapping_type = MappingType.SYMMETRIC
+        block_size = (1, group_size)
+        target_dtype = torch.int8
+        quant_min = -128
+        quant_max = 127
+        eps = 1e-5
+        zero_point_dtype = None
+        zero_point_domain = None
     layout = GemlitePackedLayout(group_size=group_size, bit_width=bit_width, packing_bitwidth=packing_bitwidth, contiguous=contiguous)
     return to_affine_quantized_intx(weight, mapping_type, block_size, target_dtype, quant_min, quant_max, eps, zero_point_dtype=zero_point_dtype, zero_point_domain=zero_point_domain, _layout=layout, use_hqq=use_hqq)
 
@@ -106,10 +117,13 @@ class GemliteAQTTensorImpl(TensorCoreTiledAQTTensorImpl):
         zero_point: Optional[torch.Tensor],
         _layout: Layout,
     ):
-        from gemlite.core import DType, GemLiteLinearTriton
+        from gemlite.core import DType, GemLiteLinearTriton, GEMLITE_ACC_DTYPE, set_autotune
 
         assert isinstance(_layout, GemlitePackedLayout), f"GemliteAQTTensorImpl only works with GemliteLinearTriton but got {_layout}"
         group_size, bit_width = _layout.group_size, _layout.bit_width
+
+        GEMLITE_ACC_DTYPE[DType.FP16] = DType.FP32
+        set_autotune({'GEMV_REVSPLITK':True, 'GEMV':True, 'GEMM_SPLITK':True, 'GEMM':True}, exhaustive=False, use_cuda_graph=False)
 
         out_features, in_features = int_data.shape
         input_dtype, output_dtype = DType.FP16, DType.FP16

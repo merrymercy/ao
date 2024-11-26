@@ -236,7 +236,6 @@ def main(
                 packing_bitwidth = int(_quant_args[-3])
             except:
                 packing_bitwidth = 8
-            set_autotune({'GEMV_REVSPLITK':True, 'GEMV':True, 'GEMM_SPLITK':True, 'GEMM':True}, exhaustive=False, use_cuda_graph=False)
 
             quantize_(model, gemlite_uintx_weight_only(group_size, bit_width, packing_bitwidth))
 
@@ -294,7 +293,7 @@ def main(
                 hqq_layer = HQQLinear(mod, quant_config=quant_config, compute_dtype=compute_dtype, device=device, del_orig=False)
                 if(hqq_layer.meta["group_size"] is None):
                     hqq_layer.meta["group_size"] = hqq_layer.in_features
-                import fbvscode; fbvscode.set_trace()
+
                 gemlite_linear = GemLiteLinearTriton(
                                 hqq_layer.meta["nbits"], 
                                 group_size=hqq_layer.meta["group_size"], 
@@ -308,7 +307,7 @@ def main(
                 scales     = hqq_layer.meta['scale'].clone()
                 zeros      = hqq_layer.meta['zero'].clone()
                 bias       = hqq_layer.bias.clone() if (hqq_layer.bias is not None) else None  
-                gemlite_linear.pack(W_q, scales, zeros, bias=bias, fma_mode=False, packing_bitwidth=8, contiguous=True)
+                gemlite_linear.pack(W_q, scales, zeros, bias=bias, fma_mode=False, packing_bitwidth=32, contiguous=False)
 
                 del hqq_layer.W_q
                 del hqq_layer.meta
@@ -619,6 +618,7 @@ if __name__ == '__main__':
     parser.add_argument('--write_result', type=Path, default=None, help='Path where to write the result')
 
     args = parser.parse_args()
+    print(args)
     main(
         args.prompt, args.interactive, args.num_samples, args.max_new_tokens, args.batch_size, args.top_k,
         args.temperature, args.checkpoint_path, args.quantization, args.calibration_limit, args.calibration_seq_length, args.kv_cache_quantization, args.cache_size, args.linear_causal_mask, args.save, args.compile, args.compile_prefill, args.profile, args.memory_profile, args.device, args.precision, args.write_result
