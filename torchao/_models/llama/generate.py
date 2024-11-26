@@ -438,10 +438,10 @@ def main(
     if compile:
         print("Compiling Model")
         global decode_one_token, prefill
-        decode_one_token = torch.compile(decode_one_token, fullgraph=True)
+        decode_one_token = torch.compile(decode_one_token, mode="reduce-overhead", fullgraph=True)
 
         if compile_prefill:
-            prefill = torch.compile(prefill, fullgraph=True, dynamic=True)
+            prefill = torch.compile(prefill, mode="max-autotune", fullgraph=True, dynamic=True)
 
     if memory_profile:
         if device != "cuda":
