@@ -243,14 +243,12 @@ def main(
             apply_spinquant(model)
         if "int8wo" in quantization:
             quantize_(model, int8_weight_only())
-        if "int8dq" in quantization:
+        elif "int8dq" in quantization:
             if sparsity and "semi" in sparsity:
                 quantize_(model, int8_dynamic_activation_int8_weight(layout=SemiSparseLayout()), filter_fn=ffn_only)
                 quantize_(model, int8_dynamic_activation_int8_weight(), filter_fn=not_ffn_only)
             else:
                 quantize_(model, int8_dynamic_activation_int8_weight())
-        elif "int8dq" in quantization:
-            quantize_(model, int8_dynamic_activation_int8_weight())
         elif "int4wo" in quantization:
             if "hqq" in quantization:
                 use_hqq=True
@@ -259,7 +257,7 @@ def main(
             groupsize=int(quantization.split("-")[1])
             assert groupsize in [32,64,128,256], f"int4wo groupsize needs to be one of [32,64,128,256] but got {groupsize}"
             if sparsity and "semi" in sparsity:
-                quantize_(model, int4_weight_only(layout=MarlinSparseLayout()))
+                quantize_(model, int4_weight_only(layout=MarlinSparseLayout(), group_size=groupsize))
             else:
                 quantize_(model, int4_weight_only(group_size=groupsize))
         if "marlin" in quantization:
@@ -444,7 +442,7 @@ def main(
         decode_one_token = torch.compile(decode_one_token, mode="reduce-overhead", fullgraph=True)
 
         if compile_prefill:
-            prefill = torch.compile(prefill, mode="max-autotune", fullgraph=True, dynamic=True)
+            prefill = torch.compile(prefill, fullgraph=True, dynamic=True)
 
     if memory_profile:
         if device != "cuda":
@@ -514,7 +512,7 @@ def main(
         device_sync(device=device) # MKG
         t = time.perf_counter() - t0
 
-        if not interactive:
+        if not interactive and ttft_prefill_size == 0:
                 tok_list = y[0].tolist()
                 # truncate text after end of string token
                 tokens = tok_list if not tokenizer.eos_id() in tok_list else tok_list[:tok_list.index(tokenizer.eos_id())]
