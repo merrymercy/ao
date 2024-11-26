@@ -113,7 +113,7 @@ def generate(
 
     # format model input
     prompt, input_pos = prepare_inputs_for_model(prompt)
-    prompt = prompt.repeat(batch_size, 1) # expand prompt based on batchsize
+    prompt = prompt.expand(batch_size, -1) # expand prompt based on batchsize
 
     # full prompt+output will be stored in seq
     seq = torch.empty(batch_size, max_seq_length, dtype=prompt.dtype, device=device)
@@ -541,7 +541,6 @@ def main(
 
     print("==========")
 
-    #ignore first sample for warmup
     avg_time = torch.mean(torch.tensor(aggregate_metrics['time'][1:])).item()
     tokpersec = torch.mean(torch.tensor(aggregate_metrics['tokens_per_sec'])).item()
     bandwidth = model_size * tokpersec
